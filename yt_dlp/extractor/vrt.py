@@ -282,6 +282,23 @@ class VrtNUIEBase(VRTBaseIE):
 
         return access_token, video_token
 
+    def fetch_metadata(self, url, access_token, display_id):
+        return self._download_json(
+            f'https://www.vrt.be/vrtnu-api/graphql{"" if access_token else "/public"}/v1',
+            display_id, 'Downloading asset JSON', 'Unable to download asset JSON',
+            data=json.dumps({
+                'operationName': self._MEDIA_PAGE_QUERY_OPERATION_NAME,
+                'query': self._MEDIA_PAGE_QUERY,
+                'variables': {'pageId': urllib.parse.urlparse(url).path},
+            }).encode(),
+            headers=filter_dict({
+                'Authorization': f'Bearer {access_token}' if access_token else None,
+                'Content-Type': 'application/json',
+                'x-vrt-client-name': 'WEB',
+                'x-vrt-client-version': '1.5.9',
+                'x-vrt-zone': 'default',
+            }))['data']['page']
+
 
 class VrtNUIE(VrtNUIEBase):
     IE_NAME = 'vrtmax'
@@ -403,21 +420,7 @@ class VrtNUIE(VrtNUIEBase):
         display_id = self._match_id(url)
         access_token, video_token = self._fetch_tokens()
 
-        metadata = self._download_json(
-            f'https://www.vrt.be/vrtnu-api/graphql{"" if access_token else "/public"}/v1',
-            display_id, 'Downloading asset JSON', 'Unable to download asset JSON',
-            data=json.dumps({
-                'operationName': self._MEDIA_PAGE_QUERY_OPERATION_NAME,
-                'query': self._MEDIA_PAGE_QUERY,
-                'variables': {'pageId': urllib.parse.urlparse(url).path},
-            }).encode(),
-            headers=filter_dict({
-                'Authorization': f'Bearer {access_token}' if access_token else None,
-                'Content-Type': 'application/json',
-                'x-vrt-client-name': 'WEB',
-                'x-vrt-client-version': '1.5.9',
-                'x-vrt-zone': 'default',
-            }))['data']['page']
+        metadata = self.fetch_metadata(url, access_token, display_id)
 
         video_id = metadata['player']['modes'][0]['streamId']
 
