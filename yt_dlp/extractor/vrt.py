@@ -475,6 +475,19 @@ class VrtNURadioIE(VrtNUIEBase):
     IE_DESC = 'VRT MAX Radio (formerly VRT NU)'
 
     _VALID_URL = r'https?://(?:www\.)?vrt\.be/vrtmax/luister/radio/[^/]+/[^/]+/(?P<id>[^/?#&]+)'
+    _TESTS = [{
+        'url': 'https://www.vrt.be/vrtmax/luister/radio/k/klara-live-op-jazz-middelheim~31-225/klara-live-op-jazz-middelheim~31-28457-0/',
+        'info_dict': {
+            'duration': 9000.043,
+            'thumbnail': 'https://images.vrt.be/orig/2024/03/07/b8b2fbfd-dc61-11ee-b483-02b7b76bf47f.jpg',
+            'channel': 'klara',
+            'ext': 'mp4',
+            'title': 'Klara Live op Jazz Middelheim - 2025-06-07 20_00',
+            'id': 'pbs-pub-57aa55b1-da11-4749-bdd6-a2cdc5bba25c$aud-4f672d08-c7ff-48d0-980e-5f43db55e381',
+            'description': 'Dee Dee Bridgewater laat met een kanjer van een stem zien waarom ze het label van jazzicoon meer dan verdient!\nBeleef Jazz Middelheim vanop de eerste rij! Bart Vanhoudt, Guy Peters en Lies Steppe laten u ook thuis en onderweg meegenieten met interviews, reportages en concerten.',
+            'display_id': 'klara-live-op-jazz-middelheim~31-28457-0',
+        },
+    }]
 
     _MEDIA_PAGE_QUERY = '''
         query RadioEpisodePage($pageId: ID!) {
@@ -1031,13 +1044,12 @@ class VrtNURadioIE(VrtNUIEBase):
                 # 'title': ('title', {str}),
                 'channel': ('brand', {str}),
             }),
+            'ext': 'm4a',
             'title': program_name,
             'id': video_id,
             'description': description,
             'display_id': display_id,
             'formats': formats,
-            '_old_archive_ids': [make_archive_id('Canvas', video_id),
-                                 make_archive_id('Ketnet', video_id)],
         }
 
 
