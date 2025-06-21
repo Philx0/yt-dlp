@@ -179,7 +179,111 @@ class VRTIE(VRTBaseIE):
         }
 
 
-class VrtNUIE(VRTBaseIE):
+class VrtNUIEBase(VRTBaseIE):
+    _NETRC_MACHINE = 'vrtnu'
+    _TOKEN_COOKIE_DOMAIN = '.www.vrt.be'
+    _ACCESS_TOKEN_COOKIE_NAME = 'vrtnu-site_profile_at'
+    _REFRESH_TOKEN_COOKIE_NAME = 'vrtnu-site_profile_rt'
+    _MEDIA_TOKEN_COOKIE_NAME = 'vrtnu-site_profile_vt'
+
+    def _fetch_tokens(self):
+        has_credentials = self._get_login_info()[0]
+        access_token = self._get_vrt_cookie(self._ACCESS_TOKEN_COOKIE_NAME)
+        video_token = self._get_vrt_cookie(self._MEDIA_TOKEN_COOKIE_NAME)
+
+        if (access_token and not self._is_jwt_token_expired(access_token)
+                and video_token and not self._is_jwt_token_expired(video_token)):
+            return access_token, video_token
+
+        if has_credentials:
+            access_token, video_token = self.cache.load(self._NETRC_MACHINE, 'token_data', default=(None, None))
+
+            if (access_token and not self._is_jwt_token_expired(access_token)
+                    and video_token and not self._is_jwt_token_expired(video_token)):
+                self.write_debug('Restored tokens from cache')
+                self._set_cookie(self._TOKEN_COOKIE_DOMAIN, self._ACCESS_TOKEN_COOKIE_NAME, access_token)
+                self._set_cookie(self._TOKEN_COOKIE_DOMAIN, self._MEDIA_TOKEN_COOKIE_NAME, video_token)
+                return access_token, video_token
+
+        if not self._get_vrt_cookie(self._REFRESH_TOKEN_COOKIE_NAME):
+            return None, None
+
+        self._request_webpage(
+            'https://www.vrt.be/vrtmax/sso/refresh', None,
+            note='Refreshing tokens', errnote='Failed to refresh tokens', fatal=False)
+
+        access_token = self._get_vrt_cookie(self._ACCESS_TOKEN_COOKIE_NAME)
+        video_token = self._get_vrt_cookie(self._MEDIA_TOKEN_COOKIE_NAME)
+
+        if not access_token or not video_token:
+            self.cache.store(self._NETRC_MACHINE, 'refresh_token', None)
+            self.cookiejar.clear(self._TOKEN_COOKIE_DOMAIN, '/vrtmax/sso', self._REFRESH_TOKEN_COOKIE_NAME)
+            msg = 'Refreshing of tokens failed'
+            if not has_credentials:
+                self.report_warning(msg)
+                return None, None
+            self.report_warning(f'{msg}. Re-logging in')
+            return self._perform_login(*self._get_login_info())
+
+        if has_credentials:
+            self.cache.store(self._NETRC_MACHINE, 'token_data', (access_token, video_token))
+
+        return access_token, video_token
+
+    def _get_vrt_cookie(self, cookie_name):
+        # Refresh token cookie is scoped to /vrtmax/sso, others are scoped to /
+        return try_call(lambda: self._get_cookies('https://www.vrt.be/vrtmax/sso')[cookie_name].value)
+
+    @staticmethod
+    def _is_jwt_token_expired(token):
+        return jwt_decode_hs256(token)['exp'] - time.time() < 300
+
+    def _perform_login(self, username, password):
+        refresh_token = self._get_vrt_cookie(self._REFRESH_TOKEN_COOKIE_NAME)
+        if refresh_token and not self._is_jwt_token_expired(refresh_token):
+            self.write_debug('Using refresh token from logged-in cookies; skipping login with credentials')
+            return
+
+        refresh_token = self.cache.load(self._NETRC_MACHINE, 'refresh_token', default=None)
+        if refresh_token and not self._is_jwt_token_expired(refresh_token):
+            self.write_debug('Restored refresh token from cache')
+            self._set_cookie(self._TOKEN_COOKIE_DOMAIN, self._REFRESH_TOKEN_COOKIE_NAME, refresh_token, path='/vrtmax/sso')
+            return
+
+        self._request_webpage(
+            'https://www.vrt.be/vrtmax/sso/login', None,
+            note='Getting session cookies', errnote='Failed to get session cookies')
+
+        login_data = self._download_json(
+            'https://login.vrt.be/perform_login', None, data=json.dumps({
+                'clientId': 'vrtnu-site',
+                'loginID': username,
+                'password': password,
+            }).encode(), headers={
+                'Content-Type': 'application/json',
+                'Oidcxsrf': self._get_cookies('https://login.vrt.be')['OIDCXSRF'].value,
+            }, note='Logging in', errnote='Login failed', expected_status=403)
+        if login_data.get('errorCode'):
+            raise ExtractorError(f'Login failed: {login_data.get("errorMessage")}', expected=True)
+
+        self._request_webpage(
+            login_data['redirectUrl'], None,
+            note='Getting access token', errnote='Failed to get access token')
+
+        access_token = self._get_vrt_cookie(self._ACCESS_TOKEN_COOKIE_NAME)
+        video_token = self._get_vrt_cookie(self._MEDIA_TOKEN_COOKIE_NAME)
+        refresh_token = self._get_vrt_cookie(self._REFRESH_TOKEN_COOKIE_NAME)
+
+        if not all((access_token, video_token, refresh_token)):
+            raise ExtractorError('Unable to extract token cookie values')
+
+        self.cache.store(self._NETRC_MACHINE, 'token_data', (access_token, video_token))
+        self.cache.store(self._NETRC_MACHINE, 'refresh_token', refresh_token)
+
+        return access_token, video_token
+
+
+class VrtNUIE(VrtNUIEBase):
     IE_NAME = 'vrtmax'
     IE_DESC = 'VRT MAX (formerly VRT NU)'
     _VALID_URL = r'https?://(?:www\.)?vrt\.be/(?:vrtnu|vrtmax)/a-z/(?:[^/]+/){2}(?P<id>[^/?#&]+)'
@@ -257,13 +361,8 @@ class VrtNUIE(VRTBaseIE):
             ],
         },
     }]
-    _NETRC_MACHINE = 'vrtnu'
 
-    _TOKEN_COOKIE_DOMAIN = '.www.vrt.be'
-    _ACCESS_TOKEN_COOKIE_NAME = 'vrtnu-site_profile_at'
-    _REFRESH_TOKEN_COOKIE_NAME = 'vrtnu-site_profile_rt'
-    _VIDEO_TOKEN_COOKIE_NAME = 'vrtnu-site_profile_vt'
-    _VIDEO_PAGE_QUERY = '''
+    _MEDIA_PAGE_QUERY = '''
     query VideoPage($pageId: ID!) {
         page(id: $pageId) {
             ... on EpisodePage {
@@ -298,102 +397,7 @@ class VrtNUIE(VRTBaseIE):
         }
     }
     '''
-
-    def _fetch_tokens(self):
-        has_credentials = self._get_login_info()[0]
-        access_token = self._get_vrt_cookie(self._ACCESS_TOKEN_COOKIE_NAME)
-        video_token = self._get_vrt_cookie(self._VIDEO_TOKEN_COOKIE_NAME)
-
-        if (access_token and not self._is_jwt_token_expired(access_token)
-                and video_token and not self._is_jwt_token_expired(video_token)):
-            return access_token, video_token
-
-        if has_credentials:
-            access_token, video_token = self.cache.load(self._NETRC_MACHINE, 'token_data', default=(None, None))
-
-            if (access_token and not self._is_jwt_token_expired(access_token)
-                    and video_token and not self._is_jwt_token_expired(video_token)):
-                self.write_debug('Restored tokens from cache')
-                self._set_cookie(self._TOKEN_COOKIE_DOMAIN, self._ACCESS_TOKEN_COOKIE_NAME, access_token)
-                self._set_cookie(self._TOKEN_COOKIE_DOMAIN, self._VIDEO_TOKEN_COOKIE_NAME, video_token)
-                return access_token, video_token
-
-        if not self._get_vrt_cookie(self._REFRESH_TOKEN_COOKIE_NAME):
-            return None, None
-
-        self._request_webpage(
-            'https://www.vrt.be/vrtmax/sso/refresh', None,
-            note='Refreshing tokens', errnote='Failed to refresh tokens', fatal=False)
-
-        access_token = self._get_vrt_cookie(self._ACCESS_TOKEN_COOKIE_NAME)
-        video_token = self._get_vrt_cookie(self._VIDEO_TOKEN_COOKIE_NAME)
-
-        if not access_token or not video_token:
-            self.cache.store(self._NETRC_MACHINE, 'refresh_token', None)
-            self.cookiejar.clear(self._TOKEN_COOKIE_DOMAIN, '/vrtmax/sso', self._REFRESH_TOKEN_COOKIE_NAME)
-            msg = 'Refreshing of tokens failed'
-            if not has_credentials:
-                self.report_warning(msg)
-                return None, None
-            self.report_warning(f'{msg}. Re-logging in')
-            return self._perform_login(*self._get_login_info())
-
-        if has_credentials:
-            self.cache.store(self._NETRC_MACHINE, 'token_data', (access_token, video_token))
-
-        return access_token, video_token
-
-    def _get_vrt_cookie(self, cookie_name):
-        # Refresh token cookie is scoped to /vrtmax/sso, others are scoped to /
-        return try_call(lambda: self._get_cookies('https://www.vrt.be/vrtmax/sso')[cookie_name].value)
-
-    @staticmethod
-    def _is_jwt_token_expired(token):
-        return jwt_decode_hs256(token)['exp'] - time.time() < 300
-
-    def _perform_login(self, username, password):
-        refresh_token = self._get_vrt_cookie(self._REFRESH_TOKEN_COOKIE_NAME)
-        if refresh_token and not self._is_jwt_token_expired(refresh_token):
-            self.write_debug('Using refresh token from logged-in cookies; skipping login with credentials')
-            return
-
-        refresh_token = self.cache.load(self._NETRC_MACHINE, 'refresh_token', default=None)
-        if refresh_token and not self._is_jwt_token_expired(refresh_token):
-            self.write_debug('Restored refresh token from cache')
-            self._set_cookie(self._TOKEN_COOKIE_DOMAIN, self._REFRESH_TOKEN_COOKIE_NAME, refresh_token, path='/vrtmax/sso')
-            return
-
-        self._request_webpage(
-            'https://www.vrt.be/vrtmax/sso/login', None,
-            note='Getting session cookies', errnote='Failed to get session cookies')
-
-        login_data = self._download_json(
-            'https://login.vrt.be/perform_login', None, data=json.dumps({
-                'clientId': 'vrtnu-site',
-                'loginID': username,
-                'password': password,
-            }).encode(), headers={
-                'Content-Type': 'application/json',
-                'Oidcxsrf': self._get_cookies('https://login.vrt.be')['OIDCXSRF'].value,
-            }, note='Logging in', errnote='Login failed', expected_status=403)
-        if login_data.get('errorCode'):
-            raise ExtractorError(f'Login failed: {login_data.get("errorMessage")}', expected=True)
-
-        self._request_webpage(
-            login_data['redirectUrl'], None,
-            note='Getting access token', errnote='Failed to get access token')
-
-        access_token = self._get_vrt_cookie(self._ACCESS_TOKEN_COOKIE_NAME)
-        video_token = self._get_vrt_cookie(self._VIDEO_TOKEN_COOKIE_NAME)
-        refresh_token = self._get_vrt_cookie(self._REFRESH_TOKEN_COOKIE_NAME)
-
-        if not all((access_token, video_token, refresh_token)):
-            raise ExtractorError('Unable to extract token cookie values')
-
-        self.cache.store(self._NETRC_MACHINE, 'token_data', (access_token, video_token))
-        self.cache.store(self._NETRC_MACHINE, 'refresh_token', refresh_token)
-
-        return access_token, video_token
+    _MEDIA_PAGE_QUERY_OPERATION_NAME = 'VideoPage'
 
     def _real_extract(self, url):
         display_id = self._match_id(url)
@@ -403,8 +407,8 @@ class VrtNUIE(VRTBaseIE):
             f'https://www.vrt.be/vrtnu-api/graphql{"" if access_token else "/public"}/v1',
             display_id, 'Downloading asset JSON', 'Unable to download asset JSON',
             data=json.dumps({
-                'operationName': 'VideoPage',
-                'query': self._VIDEO_PAGE_QUERY,
+                'operationName': self._MEDIA_PAGE_QUERY_OPERATION_NAME,
+                'query': self._MEDIA_PAGE_QUERY,
                 'variables': {'pageId': urllib.parse.urlparse(url).path},
             }).encode(),
             headers=filter_dict({
