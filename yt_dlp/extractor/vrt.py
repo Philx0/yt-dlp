@@ -470,6 +470,577 @@ class VrtNUIE(VrtNUIEBase):
         }
 
 
+class VrtNURadioIE(VrtNUIEBase):
+    IE_NAME = 'vrtmax_radio'
+    IE_DESC = 'VRT MAX Radio (formerly VRT NU)'
+
+    _VALID_URL = r'https?://(?:www\.)?vrt\.be/vrtmax/luister/radio/[^/]+/[^/]+/(?P<id>[^/?#&]+)'
+
+    _MEDIA_PAGE_QUERY = '''
+        query RadioEpisodePage($pageId: ID!) {
+        page(id: $pageId) {
+            ... on RadioEpisodePage {
+            radioEpisode {
+                objectId
+                startDate
+                presenters {
+                name
+                category
+                title
+                icon
+                __typename
+                }
+                __typename
+            }
+            __typename
+            }
+            ... on PlaybackPage {
+            ...playbackPageFragment
+            header {
+                title
+                announcementValue
+                brandsLogos {
+                brandTitle
+                logos {
+                    type
+                    mono
+                    width
+                    height
+                    __typename
+                }
+                __typename
+                }
+                __typename
+            }
+            __typename
+            }
+            ...errorFragment
+            __typename
+        }
+        }
+        fragment playbackPageFragment on PlaybackPage {
+        __typename
+        objectId
+        title
+        brand
+        brandLogos {
+            ...brandLogosFragment
+            __typename
+        }
+        permalink
+        seo {
+            ...seoFragment
+            __typename
+        }
+        socialSharing {
+            ...socialSharingFragment
+            __typename
+        }
+        trackingData {
+            ...trackingDataFragment
+            __typename
+        }
+        ldjson
+        player {
+            ...playerFragment
+            __typename
+        }
+        menu {
+            ...menuFragment
+            __typename
+        }
+        nudge {
+            ...nudgeFragment
+            __typename
+        }
+        components {
+            ...bannerFragment
+            ...contactInfoFragment
+            ...mediaInfoFragment
+            __typename
+        }
+        }
+        fragment menuFragment on ContainerNavigation {
+        __typename
+        objectId
+        items {
+            __typename
+            objectId
+            componentId
+            title
+            active
+            action {
+            ... on SwitchTabAction {
+                __typename
+                referencedTabId
+                mediaType
+                link
+            }
+            __typename
+            }
+        }
+        }
+        fragment seoFragment on SeoProperties {
+        __typename
+        title
+        description
+        }
+        fragment socialSharingFragment on SocialSharingProperties {
+        __typename
+        title
+        description
+        image {
+            __typename
+            objectId
+            templateUrl
+        }
+        }
+        fragment playerFragment on MediaPlayer {
+        __typename
+        objectId
+        classification {
+            iconName
+            __typename
+        }
+        maxAge
+        image {
+            ...imageFragment
+            __typename
+        }
+        modes {
+            __typename
+            active
+            adsUrl
+            cimMediaTrackingData {
+            channel
+            ct
+            programDuration
+            programId
+            programName
+            se
+            st
+            tv
+            __typename
+            }
+            mediaTrackingData {
+            ...trackingDataFragment
+            __typename
+            }
+            token {
+            placeholder
+            value
+            __typename
+            }
+            resumePointTemplate {
+            mediaId
+            mediaName
+            __typename
+            }
+            streamId
+            ... on VideoPlayerMode {
+            aspectRatio
+            __typename
+            }
+        }
+        progress {
+            __typename
+            completed
+            durationInSeconds
+            progressInSeconds
+        }
+        secondaryMeta {
+            ...metaFragment
+            __typename
+        }
+        sportBuffStreamId
+        subtitle
+        title
+        }
+        fragment imageFragment on Image {
+        __typename
+        objectId
+        alt
+        focusPoint {
+            x
+            y
+            __typename
+        }
+        templateUrl
+        }
+        fragment metaFragment on MetaDataItem {
+        __typename
+        type
+        value
+        shortValue
+        longValue
+        }
+        fragment trackingDataFragment on PageTrackingData {
+        data
+        perTrigger {
+            trigger
+            data
+            template {
+            id
+            __typename
+            }
+            __typename
+        }
+        __typename
+        }
+        fragment bannerFragment on Banner {
+        __typename
+        objectId
+        accessibilityTitle
+        brand
+        countdown {
+            date
+            __typename
+        }
+        richDescription {
+            __typename
+            text
+        }
+        image {
+            objectId
+            templateUrl
+            alt
+            focusPoint {
+            x
+            y
+            __typename
+            }
+            __typename
+        }
+        title
+        compactLayout
+        textTheme
+        backgroundColor
+        style
+        action {
+            ...actionFragment
+            __typename
+        }
+        actionItems {
+            ...actionItemFragment
+            __typename
+        }
+        titleArt {
+            objectId
+            templateUrl
+            __typename
+        }
+        labelMeta {
+            __typename
+            type
+            value
+        }
+        ... on IComponent {
+            ...componentTrackingDataFragment
+            __typename
+        }
+        }
+        fragment actionFragment on Action {
+        __typename
+        ... on FavoriteAction {
+            id
+            favorite
+            title
+            __typename
+        }
+        ... on ListDeleteAction {
+            listName
+            id
+            listId
+            title
+            __typename
+        }
+        ... on ListTileDeletedAction {
+            listName
+            id
+            listId
+            __typename
+        }
+        ... on LinkAction {
+            internalTarget
+            linkId
+            link
+            internalTarget
+            externalTarget
+            passUserIdentity
+            zone {
+            preferredZone
+            isExclusive
+            __typename
+            }
+            linkTokens {
+            __typename
+            placeholder
+            value
+            }
+            __typename
+        }
+        ... on ClientDrivenAction {
+            __typename
+            clientDrivenActionType
+        }
+        ... on ShareAction {
+            title
+            url
+            __typename
+        }
+        ... on SwitchTabAction {
+            referencedTabId
+            mediaType
+            link
+            __typename
+        }
+        ... on FinishAction {
+            id
+            __typename
+        }
+        }
+        fragment actionItemFragment on ActionItem {
+        __typename
+        objectId
+        accessibilityLabel
+        active
+        mode
+        title
+        themeOverride
+        action {
+            ...actionFragment
+            __typename
+        }
+        icons {
+            ...iconFragment
+            __typename
+        }
+        }
+        fragment iconFragment on Icon {
+        __typename
+        accessibilityLabel
+        position
+        ... on DesignSystemIcon {
+            value {
+            name
+            __typename
+            }
+            activeValue {
+            name
+            __typename
+            }
+            __typename
+        }
+        ... on ImageIcon {
+            value {
+            srcSet {
+                src
+                format
+                __typename
+            }
+            __typename
+            }
+            activeValue {
+            srcSet {
+                src
+                format
+                __typename
+            }
+            __typename
+            }
+            __typename
+        }
+        }
+        fragment componentTrackingDataFragment on IComponent {
+        trackingData {
+            data
+            perTrigger {
+            trigger
+            data
+            template {
+                id
+                __typename
+            }
+            __typename
+            }
+            __typename
+        }
+        __typename
+        }
+        fragment brandLogosFragment on Logo {
+        colorOnColor
+        height
+        mono
+        primary
+        type
+        width
+        __typename
+        }
+        fragment contactInfoFragment on ContactInfo {
+        __typename
+        title
+        items {
+            title
+            description
+            options {
+            objectId
+            title
+            icons {
+                ...iconFragment
+                __typename
+            }
+            action {
+                ... on LinkAction {
+                link
+                externalTarget
+                __typename
+                }
+                __typename
+            }
+            __typename
+            }
+            __typename
+        }
+        }
+        fragment mediaInfoFragment on MediaInfo {
+        __typename
+        objectId
+        title
+        maxAge
+        description
+        accessibilityTitle
+        actionItems {
+            ...actionItemFragment
+            __typename
+        }
+        trackingData {
+            ...trackingDataFragment
+            __typename
+        }
+        image {
+            ...imageFragment
+            __typename
+        }
+        primaryMeta {
+            ...metaFragment
+            __typename
+        }
+        secondaryMeta {
+            ...metaFragment
+            __typename
+        }
+        tertiaryMeta {
+            ...metaFragment
+            __typename
+        }
+        }
+        fragment nudgeFragment on PopUp {
+        __typename
+        buttons {
+            ...actionItemFragment
+            __typename
+        }
+        description
+        image {
+            ...imageFragment
+            __typename
+        }
+        objectId
+        title
+        trackingData {
+            ...trackingDataFragment
+            __typename
+        }
+        }
+        fragment errorFragment on ErrorPage {
+        errorComponents: components {
+            ...noContentFragment
+            __typename
+        }
+        __typename
+        }
+        fragment noContentFragment on NoContent {
+        __typename
+        objectId
+        title
+        text
+        backgroundImage {
+            ...imageFragment
+            __typename
+        }
+        mainImage {
+            ...imageFragment
+            __typename
+        }
+        noContentType
+        actionItems {
+            ...actionItemFragment
+            __typename
+        }
+        }'''
+    _MEDIA_PAGE_QUERY_OPERATION_NAME = 'RadioEpisodePage'
+
+    def _real_extract(self, url):
+        display_id = self._match_id(url)
+        access_token, video_token = self._fetch_tokens()
+
+        metadata = self.fetch_metadata(url, access_token, display_id)
+
+        video_id = metadata['player']['modes'][0]['streamId']
+
+        try:
+            streaming_info = self._call_api(video_id, 'vrtnu-web@PROD', id_token=video_token)
+        except ExtractorError as e:
+            if not video_token and isinstance(e.cause, HTTPError) and e.cause.status == 404:
+                self.raise_login_required()
+            raise
+
+        formats, subtitles = self._extract_formats_and_subtitles(streaming_info, video_id)
+
+        code = traverse_obj(streaming_info, ('code', {str}))
+        if not formats and code:
+            if code in ('CONTENT_AVAILABLE_ONLY_FOR_BE_RESIDENTS', 'CONTENT_AVAILABLE_ONLY_IN_BE', 'CONTENT_UNAVAILABLE_VIA_PROXY'):
+                self.raise_geo_restricted(countries=['BE'])
+            elif code in ('CONTENT_AVAILABLE_ONLY_FOR_BE_RESIDENTS_AND_EXPATS', 'CONTENT_IS_AGE_RESTRICTED', 'CONTENT_REQUIRES_AUTHENTICATION'):
+                self.raise_login_required()
+            else:
+                self.raise_no_formats(f'Unable to extract formats: {code}')
+
+        description = traverse_obj(metadata, ('components', 0, 'description', {str}))
+
+        thumbnail = traverse_obj(metadata, ('player', 'image', 'templateUrl', {str}))
+
+        program_name = traverse_obj(metadata, ('player', 'modes', 0, 'cimMediaTrackingData', 'programName', {str}))
+
+        # reformat program name from 'ProgramName - 30/01/2025 22:00' to 'ProgramName - 2025-06-18 22_00'
+        if program_name:
+            import re
+            match = re.match(r'^(.+?)\s*-\s*(\d{2})/(\d{2})/(\d{4})\s+(\d{2}):(\d{2})$', program_name)
+            if match:
+                show_name, day, month, year, hour, minute = match.groups()
+                program_name = f'{show_name} - {year}-{month}-{day} {hour}_{minute}'
+
+        return {
+            'duration': float_or_none(streaming_info.get('duration'), 1000),
+            'thumbnail': thumbnail,
+            **self._json_ld(traverse_obj(metadata, ('ldjson', ..., {json.loads})), video_id, fatal=False),
+            **traverse_obj(metadata, ('radioEpisode', {
+                'timestamp': ('startDate', parse_iso8601),
+            })),
+            **traverse_obj(metadata, {
+                # 'title': ('title', {str}),
+                'channel': ('brand', {str}),
+            }),
+            'title': program_name,
+            'id': video_id,
+            'description': description,
+            'display_id': display_id,
+            'formats': formats,
+            '_old_archive_ids': [make_archive_id('Canvas', video_id),
+                                 make_archive_id('Ketnet', video_id)],
+        }
+
+
 class DagelijkseKostIE(VRTBaseIE):
     IE_DESC = 'dagelijksekost.een.be'
     _VALID_URL = r'https?://dagelijksekost\.een\.be/gerechten/(?P<id>[^/?#&]+)'
